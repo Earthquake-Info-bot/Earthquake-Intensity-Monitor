@@ -3,11 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>[v1.1.7]簡易震度計</title>
+
+<title>[v1.2.1]簡易震度計</title>
+
 <style>
 *{
   box-sizing:border-box;
 }
+
 body{
   margin:0;
   padding:12px;
@@ -16,10 +19,12 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   font-variant-numeric:tabular-nums;
 }
+
 h1{
   margin:0 0 10px;
   font-size:22px;
 }
+
 #errorBox{
   display:none;
   margin-bottom:10px;
@@ -29,31 +34,37 @@ h1{
   white-space:pre-wrap;
   line-height:1.5;
 }
+
 .card{
   background:#1a1f2b;
   border-radius:14px;
   padding:12px;
   margin-bottom:10px;
 }
+
 .label{
   opacity:.7;
   font-size:13px;
   margin-bottom:6px;
 }
+
 .big{
   font-size:42px;
   font-weight:800;
   line-height:1;
 }
+
 .medium{
   font-size:24px;
   font-weight:700;
 }
+
 .grid{
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:10px;
 }
+
 canvas{
   width:100%;
   height:120px;
@@ -61,12 +72,14 @@ canvas{
   border-radius:10px;
   display:block;
 }
+
 .note{
   margin-top:10px;
   opacity:.55;
   font-size:11px;
   line-height:1.5;
 }
+
 #startModal{
   position:fixed;
   inset:0;
@@ -76,6 +89,7 @@ canvas{
   justify-content:center;
   z-index:9999;
 }
+
 #modalContent{
   width:min(90%,400px);
   background:#1a1f2b;
@@ -83,10 +97,12 @@ canvas{
   padding:26px;
   text-align:center;
 }
+
 #modalContent h2{
   margin:0 0 22px;
   font-size:24px;
 }
+
 button{
   width:100%;
   border:none;
@@ -98,68 +114,131 @@ button{
   font-weight:700;
   cursor:pointer;
 }
-.intensityCard{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:16px;
-}
+
 #debugInfo{
-  opacity:.45;
-  font-size:11px;
-  line-height:1.5;
-  font-family:monospace;
+  opacity:.65;
+  font-size:12px;
+  line-height:1.7;
   white-space:pre-wrap;
-  text-align:right;
 }
 </style>
 </head>
+
 <body>
+
 <h1>簡易震度計</h1>
+
 <div id="errorBox"></div>
+
 <div id="startModal">
   <div id="modalContent">
+
     <h2>Earthquake Intensity Monitor</h2>
+
     <button id="startBtn">
       観測開始
     </button>
+
   </div>
 </div>
-<div class="card intensityCard">
-  <div>
-    <div class="label">推定震度</div>
-    <div class="big" id="shindo">
-      --
-    </div>
+
+<div class="card">
+
+  <div class="label">
+    推定震度
   </div>
-  <div id="debugInfo">
+
+  <div class="big" id="shindo">
     --
   </div>
+
 </div>
+
 <div class="grid">
+
   <div class="card">
-    <div class="label">計測震度</div>
+
+    <div class="label">
+      計測震度
+    </div>
+
     <div class="medium" id="calcIntensity">
       --
     </div>
+
   </div>
+
   <div class="card">
-    <div class="label">リアルタイム加速度</div>
+
+    <div class="label">
+      リアルタイム加速度
+    </div>
+
     <div class="medium">
       <span id="currentAcc">--</span> gal
     </div>
+
   </div>
+
 </div>
+
+<div class="grid">
+
+  <div class="card">
+
+    <div class="label">
+      0.3秒最大加速度
+    </div>
+
+    <div class="medium">
+      <span id="pga">--</span> gal
+    </div>
+
+  </div>
+
+  <div class="card">
+
+    <div class="label">
+      センサー更新頻度
+    </div>
+
+    <div class="medium">
+      <span id="hz">--</span> Hz
+    </div>
+
+  </div>
+
+</div>
+
 <div class="card">
-  <div class="label">波形</div>
+
+  <div class="label">
+    波形
+  </div>
+
   <canvas id="waveCanvas"
           width="800"
           height="120"></canvas>
+
 </div>
+
+<div class="card">
+
+  <div class="label">
+    詳細データ
+  </div>
+
+  <div id="debugInfo">
+    --
+  </div>
+
+</div>
+
 <div class="note">
 ※スマートフォン内蔵センサーによる簡易観測です。<br>
-気象庁発表の震度とは一致しない場合があります。
+気象庁震度階級とは一致しない場合があります。
 </div>
+
 <script>
 const errorBox =
   document.getElementById("errorBox");
@@ -167,19 +246,34 @@ const errorBox =
 const startBtn =
   document.getElementById("startBtn");
 
+const canvas =
+  document.getElementById("waveCanvas");
+
+const ctx =
+  canvas.getContext("2d");
+
+let waveData = [];
+
 function showError(message, fatal = false){
 
   console.error(message);
 
   errorBox.style.display = "block";
+
   errorBox.textContent = message;
 
   if(fatal){
+
     alert(message);
+
   }else{
+
     setTimeout(() => {
+
       errorBox.style.display = "none";
+
     }, 5000);
+
   }
 
 }
@@ -216,16 +310,12 @@ startBtn.addEventListener("click", async () => {
       "センサー初期化中...";
 
     if(
-      typeof DeviceMotionEvent !==
-      "undefined" &&
-
-      typeof DeviceMotionEvent
-      .requestPermission === "function"
+      typeof DeviceMotionEvent !== "undefined" &&
+      typeof DeviceMotionEvent.requestPermission === "function"
     ){
 
       const permission =
-        await DeviceMotionEvent
-        .requestPermission();
+        await DeviceMotionEvent.requestPermission();
 
       if(permission !== "granted"){
 
@@ -250,11 +340,55 @@ startBtn.addEventListener("click", async () => {
 
 });
 
+function drawWave(){
+
+  ctx.clearRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  ctx.beginPath();
+
+  for(let i = 0; i < waveData.length; i++){
+
+    const x =
+      i *
+      (canvas.width / waveData.length);
+
+    const y =
+      canvas.height / 2 -
+      waveData[i] * 1.2;
+
+    if(i === 0){
+
+      ctx.moveTo(x, y);
+
+    }else{
+
+      ctx.lineTo(x, y);
+
+    }
+
+  }
+
+  ctx.strokeStyle = "#2b6fff";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+}
+
 function startObservation(){
 
-  let lastTime = performance.now();
+  let lastTime =
+    performance.now();
 
   let lastUIUpdate = 0;
+
+  let accHistory = [];
+
+  let max03 = 0;
 
   window.addEventListener(
     "devicemotion",
@@ -278,14 +412,39 @@ function startObservation(){
       const z = acc.z || 0;
 
       const vector =
-        Math.sqrt(x*x + y*y + z*z);
+        Math.sqrt(
+          x*x +
+          y*y +
+          z*z
+        );
 
-      const gal = vector * 100;
+      const gal =
+        vector * 100;
+
+      const nowSec =
+        performance.now() / 1000;
+
+      accHistory.push({
+        time: nowSec,
+        gal: gal
+      });
+
+      accHistory =
+        accHistory.filter(
+          d => nowSec - d.time <= 0.3
+        );
+
+      max03 =
+        Math.max(
+          ...accHistory.map(
+            d => d.gal
+          )
+        );
 
       const intensity =
         2 *
         Math.log10(
-          Math.max(gal, 0.1)
+          Math.max(max03, 0.1)
         ) + 0.94;
 
       let shindo = "0";
@@ -311,12 +470,18 @@ function startObservation(){
       const hz =
         1000 / dt;
 
+      waveData.push(gal);
+
+      if(waveData.length > 120){
+
+        waveData.shift();
+
+      }
+
       const nowUI =
         performance.now();
 
-      if(
-        nowUI - lastUIUpdate > 25
-      ){
+      if(nowUI - lastUIUpdate > 25){
 
         lastUIUpdate = nowUI;
 
@@ -331,14 +496,25 @@ function startObservation(){
           .textContent =
             gal.toFixed(1);
 
+        document.getElementById("pga")
+          .textContent =
+            max03.toFixed(1);
+
+        document.getElementById("hz")
+          .textContent =
+            hz.toFixed(1);
+
         document.getElementById("debugInfo")
           .textContent =
-`X:${x.toFixed(2)}
-Y:${y.toFixed(2)}
-Z:${z.toFixed(2)}
 
-合成:${gal.toFixed(1)} gal
-Hz:${hz.toFixed(1)}`;
+`X軸加速度：${x.toFixed(2)} m/s²
+Y軸加速度：${y.toFixed(2)} m/s²
+Z軸加速度：${z.toFixed(2)} m/s²
+
+合成加速度：${gal.toFixed(1)} gal
+0.3秒最大加速度：${max03.toFixed(1)} gal`;
+
+        drawWave();
 
       }
 
