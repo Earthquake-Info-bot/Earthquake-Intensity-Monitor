@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 
-<title>[v1.1.4]簡易震度計</title>
+<title>[v1.1.6]簡易震度計</title>
 
 <style>
 *{
@@ -104,25 +104,49 @@ canvas{
   display:block;
 }
 
-details{
-  margin-top:16px;
+#startModal{
+  position:fixed;
+  inset:0;
+
+  background:rgba(0,0,0,0.75);
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  z-index:9999;
 }
 
-summary{
-  cursor:pointer;
-  font-weight:700;
+#modalContent{
+  width:min(90%, 420px);
+
+  background:#1a1f2b;
+
+  border-radius:18px;
+
+  padding:28px;
+
+  text-align:center;
 }
 
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:12px;
+#modalContent h2{
+  margin-top:0;
+  margin-bottom:24px;
+
+  font-size:24px;
 }
 
-td{
-  padding:8px 0;
-  border-bottom:1px solid rgba(255,255,255,0.08);
-  font-variant-numeric: tabular-nums;
+#debugInfo{
+  margin-top:20px;
+
+  opacity:0.45;
+
+  font-size:12px;
+  line-height:1.6;
+
+  font-family:monospace;
+
+  white-space:pre-wrap;
 }
 
 .note{
@@ -138,9 +162,17 @@ td{
 <h1>簡易震度計</h1>
   
 <div id="errorBox"></div>
-<button id="startBtn">
-観測開始
-</button>
+<div id="startModal">
+  <div id="modalContent">
+
+    <h2>Earthquake Intensity Monitor</h2>
+
+    <button id="startBtn">
+      観測開始
+    </button>
+
+  </div>
+</div>
 
 <div class="card">
   <div class="label">推定震度</div>
@@ -179,48 +211,15 @@ td{
   <canvas id="waveCanvas" width="800" height="180"></canvas>
 </div>
 
-<details class="card">
-  <summary>詳細データ</summary>
-  <table>
-    <tr>
-      <td>X加速度</td>
-      <td id="ax">--</td>
-    </tr>
-    <tr>
-      <td>Y加速度</td>
-      <td id="ay">--</td>
-    </tr>
-    <tr>
-      <td>Z加速度</td>
-      <td id="az">--</td>
-    </tr>
-    <tr>
-      <td>合成加速度</td>
-      <td id="vector">--</td>
-    </tr>
-    <tr>
-      <td>サンプルレート</td>
-      <td id="sampleRate">--</td>
-    </tr>
-    <tr>
-      <td>観測状態</td>
-      <td id="obsState">待機中</td>
-    </tr>
-  </table>
-</details>
-
+<div id="debugInfo"></div>
+  
 <div class="note">
-※スマートフォン内蔵センサーを用いた簡易観測です。<br>
-気象庁発表の震度とは一致しない場合があります。
+※スマートフォン内蔵センサーを用いた簡易観測です。気象庁発表の震度とは一致しない場合があります。
 </div>
 
 <script>
 const errorBox = document.getElementById("errorBox");
 const startBtn = document.getElementById("startBtn");
-
-function setStatus(text){
-  startBtn.textContent = text;
-}
 
 function showError(message, fatal = false){
   console.error(message);
@@ -252,7 +251,7 @@ ${e.reason}`
 startBtn.addEventListener("click", async () => {
   try{
     errorBox.style.display = "none";
-    setStatus("センサー初期化中");
+    startBtn.textContent = "センサー初期化中...";
     if(
       typeof DeviceMotionEvent !== "undefined" &&
       typeof DeviceMotionEvent.requestPermission === "function"
@@ -262,12 +261,10 @@ startBtn.addEventListener("click", async () => {
         throw new Error("モーションセンサーへのアクセスが拒否されました");
       }
     }
-    setStatus("観測開始");
-    startBtn.disabled = true;
     startObservation();
+    document.getElementById("startModal").remove();
   }catch(err){
     showError(err.message, true);
-    setStatus("エラー");
   }
 });
 
@@ -292,15 +289,14 @@ function startObservation(){
       const hz = 1000 / dt;
       const nowUI = performance.now();
       
-      if(nowUI - lastUIUpdate > 100){
+      if(nowUI - lastUIUpdate > 25){
         lastUIUpdate = nowUI;
-        document.getElementById("ax").textContent = x.toFixed(3);
-        document.getElementById("ay").textContent = y.toFixed(3);
-        document.getElementById("az").textContent = z.toFixed(3);
-        document.getElementById("vector").textContent = gal.toFixed(1) + " gal";
-        document.getElementById("currentAcc").textContent = gal.toFixed(1);
-        document.getElementById("sampleRate").textContent = hz.toFixed(1) + " Hz";
-        document.getElementById("obsState").textContent = "観測中";
+         document.getElementById("debugInfo").textContent =
+`Ｘ加速度：${x.toFixed(3)}
+Ｙ加速度：${y.toFixed(3)}
+Ｚ加速度：${z.toFixed(3)}
+合成：${gal.toFixed(1)} gal
+サンプルレート：${hz.toFixed(1)}`;
       }
     }catch(err){
       showError("センサー処理エラー\n\n" + err.message);
