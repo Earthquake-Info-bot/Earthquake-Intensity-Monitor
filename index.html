@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>簡易震度計</title>
+
+<style>
+*{
+  box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  padding:20px;
+  background:#0f1115;
+  color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+
+h1{
+  margin-top:0;
+  font-size:28px;
+}
+
+#status{
+  margin-bottom:12px;
+  padding:10px 14px;
+  border-radius:10px;
+  background:#1d2430;
+  font-weight:700;
+}
+
+#errorBox{
+  display:none;
+  margin-bottom:12px;
+  padding:12px;
+  border-radius:10px;
+  background:#b00020;
+  color:#fff;
+  white-space:pre-wrap;
+  line-height:1.5;
+}
+
+.card{
+  background:#1a1f2b;
+  border-radius:14px;
+  padding:16px;
+  margin-bottom:16px;
+}
+
+.label{
+  opacity:0.7;
+  font-size:14px;
+  margin-bottom:6px;
+}
+
+.big{
+  font-size:56px;
+  font-weight:800;
+  line-height:1;
+}
+
+.medium{
+  font-size:30px;
+  font-weight:700;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+
+.value{
+  font-size:24px;
+  font-weight:700;
+}
+
+.small{
+  opacity:0.75;
+  font-size:13px;
+}
+
+button{
+  width:100%;
+  border:none;
+  border-radius:12px;
+  padding:16px;
+  background:#2b6fff;
+  color:#fff;
+  font-size:18px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+button:disabled{
+  opacity:0.5;
+  cursor:not-allowed;
+}
+
+canvas{
+  width:100%;
+  height:180px;
+  background:#0c0f14;
+  border-radius:12px;
+  display:block;
+}
+
+details{
+  margin-top:16px;
+}
+
+summary{
+  cursor:pointer;
+  font-weight:700;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:12px;
+}
+
+td{
+  padding:8px 0;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+}
+
+.note{
+  margin-top:16px;
+  opacity:0.65;
+  font-size:13px;
+  line-height:1.6;
+}
+</style>
+</head>
+
+<body>
+
+<h1>簡易震度計</h1>
+
+<div id="status">
+待機中
+</div>
+
+<div id="errorBox"></div>
+
+<button id="startBtn">
+観測開始
+</button>
+
+<div class="card">
+  <div class="label">推定震度</div>
+  <div class="big" id="shindo">
+    --
+  </div>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <div class="label">計測震度</div>
+    <div class="medium" id="calcIntensity">
+      --
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">最大加速度</div>
+    <div class="medium">
+      <span id="pga">--</span> gal
+    </div>
+  </div>
+
+</div>
+
+<div class="card">
+  <div class="label">リアルタイム合成加速度</div>
+  <div class="medium">
+    <span id="currentAcc">--</span> gal
+  </div>
+</div>
+
+<div class="card">
+  <div class="label">波形</div>
+  <canvas id="waveCanvas" width="800" height="180"></canvas>
+</div>
+
+<details class="card">
+  <summary>詳細データ</summary>
+
+  <table>
+    <tr>
+      <td>X加速度</td>
+      <td id="ax">--</td>
+    </tr>
+
+    <tr>
+      <td>Y加速度</td>
+      <td id="ay">--</td>
+    </tr>
+
+    <tr>
+      <td>Z加速度</td>
+      <td id="az">--</td>
+    </tr>
+
+    <tr>
+      <td>合成加速度</td>
+      <td id="vector">--</td>
+    </tr>
+
+    <tr>
+      <td>サンプルレート</td>
+      <td id="sampleRate">--</td>
+    </tr>
+
+    <tr>
+      <td>観測状態</td>
+      <td id="obsState">待機中</td>
+    </tr>
+  </table>
+</details>
+
+<div class="note">
+※スマートフォン内蔵センサーを用いた簡易観測です。<br>
+気象庁発表の震度とは一致しない場合があります。
+</div>
+
+<script>
+const statusEl = document.getElementById("status");
+const errorBox = document.getElementById("errorBox");
+const startBtn = document.getElementById("startBtn");
+
+function setStatus(text){
+  statusEl.textContent = text;
+}
+
+function showError(message, fatal = false){
+  console.error(message);
+
+  errorBox.style.display = "block";
+  errorBox.textContent = message;
+
+  if(fatal){
+    alert(message);
+  }
+}
+
+window.onerror = (msg, src, line, col) => {
+  showError(
+`JavaScript Error
+
+${msg}
+
+${src}:${line}:${col}`
+  );
+};
+
+window.onunhandledrejection = (e) => {
+  showError(
+`Promise Error
+
+${e.reason}`
+  );
+};
+
+startBtn.addEventListener("click", async () => {
+
+  try{
+
+    errorBox.style.display = "none";
+
+    setStatus("センサー初期化中");
+
+    if(
+      typeof DeviceMotionEvent !== "undefined" &&
+      typeof DeviceMotionEvent.requestPermission === "function"
+    ){
+
+      const permission =
+        await DeviceMotionEvent.requestPermission();
+
+      if(permission !== "granted"){
+        throw new Error("モーションセンサーへのアクセスが拒否されました");
+      }
+    }
+
+    setStatus("観測開始");
+
+    startBtn.disabled = true;
+
+    startObservation();
+
+  }catch(err){
+
+    showError(err.message, true);
+    setStatus("エラー");
+
+  }
+
+});
+
+function startObservation(){
+
+  let lastTime = performance.now();
+
+  window.addEventListener("devicemotion", (event) => {
+
+    try{
+
+      const acc =
+        event.accelerationIncludingGravity;
+
+      if(!acc){
+        throw new Error("加速度データを取得できません");
+      }
+
+      const x = acc.x || 0;
+      const y = acc.y || 0;
+      const z = acc.z || 0;
+
+      document.getElementById("ax")
+        .textContent = x.toFixed(3);
+
+      document.getElementById("ay")
+        .textContent = y.toFixed(3);
+
+      document.getElementById("az")
+        .textContent = z.toFixed(3);
+
+      const vector =
+        Math.sqrt(x*x + y*y + z*z);
+
+      const gal = vector * 100;
+
+      document.getElementById("vector")
+        .textContent = gal.toFixed(1) + " gal";
+
+      document.getElementById("currentAcc")
+        .textContent = gal.toFixed(1);
+
+      const now = performance.now();
+      const dt = now - lastTime;
+      lastTime = now;
+
+      const hz = 1000 / dt;
+
+      document.getElementById("sampleRate")
+        .textContent = hz.toFixed(1) + " Hz";
+
+      document.getElementById("obsState")
+        .textContent = "観測中";
+
+    }catch(err){
+
+      showError(
+        "センサー処理エラー\n\n" + err.message
+      );
+
+    }
+
+  });
+
+}
+</script>
+
+</body>
+</html>
